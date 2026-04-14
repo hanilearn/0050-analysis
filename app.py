@@ -2,40 +2,43 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
 
 st.set_page_config(page_title="0050 每日分析", layout="wide", page_icon="📈")
 st.title("🧐 0050 每日股市分析 APP")
 st.caption("適合新手的簡單工具｜資料來自 Yahoo Finance｜非投資建議")
 
-# ==================== 取得資料 ====================
+# ==================== 取得資料（改用 yf.Ticker，更穩定） ====================
 ticker = "0050.TW"
 taiex = "^TWII"
 
 @st.cache_data(ttl=3600)
 def get_stock_data(symbol, period="1mo"):
     try:
-        return yf.download(symbol, period=period, progress=False)
+        stock = yf.Ticker(symbol)
+        df = stock.history(period=period)
+        if df.empty:
+            return pd.DataFrame()
+        return df
     except:
-        return pd.DataFrame()  # 抓不到就給空資料框
+        return pd.DataFrame()
 
 hist = get_stock_data(ticker)
 taiex_hist = get_stock_data(taiex)
 
 # ==================== 計算 0050 價格 ====================
-if not hist.empty and len(hist) > 1:
-    current_price = round(hist['Close'].iloc[-1], 2)
-    prev_price = round(hist['Close'].iloc[-2], 2)
+if not hist.empty and len(hist) >= 2:
+    current_price = round(float(hist['Close'].iloc[-1]), 2)
+    prev_price = round(float(hist['Close'].iloc[-2]), 2)
     change_pct = round(((current_price - prev_price) / prev_price) * 100, 2)
     date_str = hist.index[-1].strftime('%Y-%m-%d')
 else:
     current_price = 0
     change_pct = 0
-    date_str = "資料取得失敗（可能市場休市或暫時無法連線）"
+    date_str = "資料取得失敗（可能市場休市）"
 
-# ==================== 計算 台灣加權指數（獨立計算，更安全） ====================
-if not taiex_hist.empty and len(taiex_hist) > 1:
-    taiex_change = round(((taiex_hist['Close'].iloc[-1] - taiex_hist['Close'].iloc[-2]) / taiex_hist['Close'].iloc[-2]) * 100, 2)
+# ==================== 計算 台灣加權指數 ====================
+if not taiex_hist.empty and len(taiex_hist) >= 2:
+    taiex_change = round(((float(taiex_hist['Close'].iloc[-1]) - float(taiex_hist['Close'].iloc[-2])) / float(taiex_hist['Close'].iloc[-2])) * 100, 2)
 else:
     taiex_change = 0
 
@@ -51,7 +54,7 @@ with col2:
               delta=f"{taiex_change}%")
 with col3:
     st.write("**成交量**")
-    if not hist.empty:
+    if not hist.empty and pd.notna(hist['Volume'].iloc[-1]):
         st.write(f"{int(hist['Volume'].iloc[-1]):,} 股")
     else:
         st.write("N/A")
